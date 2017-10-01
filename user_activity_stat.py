@@ -1,4 +1,4 @@
-#%python
+%python
 
 
 from pyhive import presto
@@ -31,15 +31,50 @@ class WoowahanPresto(object):
     def connect(self):
         self.cursor = presto.connect(self.host, self.port).cursor()
 
+    def fetchone(self, query):
+        self.__execute(query)
+        return self.cursor.fetchone()
+
     def fetchall(self, query):
-        self.cursor.execute(query)
+        self.__execute(query)
         return self.cursor.fetchall()
+
+    def yesterday(self):
+        return self.fetchone("SELECT date_format(date_add('day', -1, current_date), '%Y-%m-%d')")
 
     def close(self):
         if self.cursor:
             self.cursor.close()
         else:
             raise Error('There is no connection to close.')
+
+    def __execute(self, query):
+        self.cursor.execute(query)
+
+
+class QueryUtils:
+    pass
+
+    def albatross_daily_statistic(self, date):
+        return ("  SELECT logtype, COUNT(logtype) "
+                "     FROM ( "
+                "       SELECT CASE log.logtype "
+                "                   WHEN 'BaeminListingLog' THEN 'Baemin Listing' "
+                "                   WHEN 'BaeminRankShopListingLog' THEN 'Baemin Listing' "
+                "                   WHEN 'BaeminFranchiseListingLog' THEN 'Baemin Listing' "
+                "                   WHEN 'BaeminSearchLog' THEN 'Baemin Search' "
+                "                   WHEN 'RidersListingLog' THEN 'Riders Listing' "
+                "                   WHEN 'RidersSearchLog' THEN 'Riders Search' "
+                "                   ELSE log.logtype "
+                "               END AS logtype "
+                "         FROM sblog.ad_listing_api_log log "
+                "        WHERE log_dt = '{query_date}' "
+                "          AND log.env = 'RELEASE' "
+                "          AND log.logtype != 'RidersShopInquiryLog' "
+                "      ) "
+                " GROUP BY logtype "
+                " ORDER BY logtype ").format(query_date=date)
+
 
 
 class Chat(object):
@@ -61,7 +96,7 @@ class Chat(object):
         return response
 
 
-class Utils:
+class SlackMessageUtils:
     pass
 
     def convert_list_to_linefeed_string(self, datas=[], index=0):
@@ -75,11 +110,14 @@ class Utils:
 
         return "\n".join(results)
 
-    def make_attachments(self, message1, message2):
+    def make_attachments(self, message1, message2, date=None):
         attachments = [{}]
-        yesterday = self.__string_date_format(date=datetime.utcnow() - timedelta(1))
+        inquery_date = date
+        if date is None:
+            inquery_date = self.__string_date_format(date=datetime.utcnow() - timedelta(1))
+
         attachments[0]['color'] = '#36a64f'
-        attachments[0]['title'] = "Baemin/Riders Daily Request Summary(Listing/Search): {0}".format(yesterday)
+        attachments[0]['title'] = "Baemin/Riders Daily Request Summary(Listing/Search): {0}".format(inquery_date)
         attachments[0]["fields"] = [{
                                         "value": message1,
                                         "short": "true"
@@ -106,45 +144,38 @@ class LoggerUtils:
 
 
 if __name__ == '__main__':
-    query = ("  SELECT logtype, COUNT(logtype) "
-            "   FROM ( "
-            "     SELECT CASE log.logtype "
-            "                 WHEN 'BaeminListingLog' THEN 'Baemin Listing' "
-            "                 WHEN 'BaeminRankShopListingLog' THEN 'Baemin Listing' "
-            "                 WHEN 'BaeminFranchiseListingLog' THEN 'Baemin Listing' "
-            "                 WHEN 'BaeminSearchLog' THEN 'Baemin Search' "
-            "                 WHEN 'RidersListingLog' THEN 'Riders Listing' "
-            "                 WHEN 'RidersSearchLog' THEN 'Riders Search' "
-            "                 ELSE log.logtype "
-            "             END AS logtype "
-            "       FROM sblog.ad_listing_api_log log "
-            "      WHERE log_dt = date_format(date_add('day', -1, current_date), '%Y-%m-%d') "
-            "        AND log.env = 'RELEASE' "
-            "        AND log.logtype != 'RidersShopInquiryLog' "
-            "    ) "
-            " GROUP BY logtype "
-            " ORDER BY logtype ")
 
-    woowahanPresto = WoowahanPresto()
     chat = Chat()
-    utils = Utils()
 
     try:
-        # Connect & Execute SQL with Presto
+        woowahanPresto = WoowahanPresto()
+        queryUtils = QueryUtils()
+        slackMessageUtils = SlackMessageUtils()
+
+        # 1. Connect
         woowahanPresto.connect()
+
+        # 2. Execute SQL with Presto
+        # 2-1. select yesterday
+        presto_yesterday = woowahanPresto.yesterday()
+        inquery_date = ''.join(presto_yesterday)
+        print(inquery_date)
+
+        # 2-2. execute query
+        query = queryUtils.albatross_daily_statistic(inquery_date)
         presto_results = woowahanPresto.fetchall(query)
         woowahanPresto.close()
 
-        # Make message for Slack
+        # 3. Make message for Slack
         response_array = list(presto_results)
-        request_type_value = utils.convert_list_to_linefeed_string(response_array, 0)
-        total_value = utils.convert_list_to_linefeed_string(response_array, 1)
-        print("request_type_value = {%s}" % request_type_value)
-        print("total = {%s}" % total_value)
+        request_type_value = slackMessageUtils.convert_list_to_linefeed_string(response_array, 0)
+        total_value = slackMessageUtils.convert_list_to_linefeed_string(response_array, 1)
+        print("request_type_value = \n{%s}" % request_type_value)
+        print("total = \n{%s}" % total_value)
 
-        attachments = utils.make_attachments(request_type_value, total_value)
+        attachments = slackMessageUtils.make_attachments(request_type_value, total_value, inquery_date)
 
-        # Send message to Slack
+        # 4. Send message to Slack
         chat.post_slack(text="`Albatross 일 통계 SUCCESS`", attachments=attachments)
         print("\nattachments = {%s}" % attachments)
 
@@ -156,4 +187,4 @@ if __name__ == '__main__':
 
         print(exception_message)
 
-        chat.post_slack("`Albatross 일 통계 Alert FAIL`\n (%s)." % exception_message)
+        chat.post_slack("`Albatross 일 통계 Alert FAIL`\n {0}".format(exception_message))
