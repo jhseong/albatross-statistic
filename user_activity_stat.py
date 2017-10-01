@@ -19,7 +19,7 @@ PRESTO_DEFAULT_USER = 'zeppelin'
 
 # albatross-info channel
 SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
-# TEST_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
+TEST_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
 
 
 class WoowahanPresto(object):
@@ -39,8 +39,8 @@ class WoowahanPresto(object):
         self.__execute(query)
         return self.cursor.fetchall()
 
-    def yesterday(self):
-        return self.fetchone("SELECT date_format(date_add('day', -1, current_date), '%Y-%m-%d')")
+    def today(self):
+        return self.fetchone("SELECT date_format(current_date, '%Y-%m-%d')")
 
     def close(self):
         if self.cursor:
@@ -114,7 +114,7 @@ class SlackMessageUtils:
         attachments = [{}]
         inquery_date = date
         if date is None:
-            inquery_date = self.__string_date_format(date=datetime.utcnow() - timedelta(1))
+            inquery_date = self.__string_date_format(date=datetime.utcnow() - timedelta(0))
 
         attachments[0]['color'] = '#36a64f'
         attachments[0]['title'] = "Baemin/Riders Daily Request Summary(Listing/Search): {0}".format(inquery_date)
@@ -156,9 +156,9 @@ if __name__ == '__main__':
         woowahanPresto.connect()
 
         # 2. Execute SQL with Presto
-        # 2-1. select yesterday
-        presto_yesterday = woowahanPresto.yesterday()
-        inquery_date = ''.join(presto_yesterday)
+        # 2-1. select today
+        presto_today = woowahanPresto.today()
+        inquery_date = ''.join(presto_today)
         print(inquery_date)
 
         # 2-2. execute query
