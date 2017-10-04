@@ -19,7 +19,7 @@ PRESTO_DEFAULT_USER = 'zeppelin'
 
 # albatross-info channel
 SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
-TEST_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
+# TEST_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
 
 
 class WoowahanPresto(object):
@@ -74,7 +74,6 @@ class QueryUtils:
                 "      ) "
                 " GROUP BY logtype "
                 " ORDER BY logtype ").format(query_date=date)
-
 
 
 class Chat(object):
@@ -142,7 +141,6 @@ class LoggerUtils:
         return tb_lines
 
 
-
 if __name__ == '__main__':
 
     chat = Chat()
@@ -176,8 +174,8 @@ if __name__ == '__main__':
         attachments = slackMessageUtils.make_attachments(request_type_value, total_value, inquery_date)
 
         # 4. Send message to Slack
-        chat.post_slack(text="`Albatross 일 통계 SUCCESS`", attachments=attachments)
-        print("\nattachments = {%s}" % attachments)
+        chat.post_slack(text="*`Albatross 일 통계 SUCCESS`*", attachments=attachments)
+        # print("\nattachments = {%s}" % attachments)
 
     except BaseException as e:
         # send error message to slack
@@ -187,4 +185,4 @@ if __name__ == '__main__':
 
         print(exception_message)
 
-        chat.post_slack("`Albatross 일 통계 Alert FAIL`\n {0}".format(exception_message))
+        chat.post_slack("*`Albatross 일 통계 Alert FAIL`*\n {0}".format(exception_message))
