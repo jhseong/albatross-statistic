@@ -73,9 +73,9 @@ class QueryUtils:
                 "      ) "
                 " GROUP BY logtype "
                 " ORDER BY logtype ").format(date=date)
-
+                
     def albatross_daily_max_rps(self, date):
-        return (" "
+        return (" " 
             " WITH user_activities AS ( "
             "     SELECT  CASE log.servicetype WHEN 'BAEMIN' THEN 'Baemin' "
             "                                  WHEN 'RIDERS' THEN 'Riders' "
@@ -84,9 +84,7 @@ class QueryUtils:
             "           , log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i:%s') AS request_seconds "
             "           , COUNT(log.log_date) AS request_cnt "
             "       FROM sblog.ad_listing_api_log log "
-            "      WHERE log_dt <= date_format(current_date, '%Y-%m-%d') "
-            "        AND log_dt >= date_format(current_date - interval '1' day, '%Y-%m-%d') "
-            "        AND date_format(log.log_date, '%Y-%m-%d') =  date_format(current_date - interval '1' day, '%Y-%m-%d') "
+            "      WHERE log_dt = '{date}' "
             "        AND log.env = 'RELEASE' "
             "   GROUP BY log.servicetype, log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i:%s') "
             " ) "
@@ -114,7 +112,7 @@ class QueryUtils:
             "       FROM ( "
             "          SELECT request_seconds, ua.servicetype "
             "               , CASE regexp_like(ua.logtype, '.ListingLog$') WHEN true THEN 'Listing' "
-            "                                                                         ELSE 'Search' "
+            "                                                                        ELSE 'Search' "
             "                  END AS logtype "
             "               , SUM(request_cnt) AS tot_request_cnt "
             "             FROM user_activities ua "
@@ -122,10 +120,10 @@ class QueryUtils:
             "       ) "
             "     GROUP BY concat(servicetype, ' ', logtype) "
             " ) "
-            " ORDER BY title ")
+            " ORDER BY title ").format(date=date)
 
     def albatross_daily_max_rpm(self, date):
-        return (" "
+        return (" " 
                 " WITH user_activities AS ( "
                 "     SELECT  CASE log.servicetype WHEN 'BAEMIN' THEN 'Baemin' "
                 "                                  WHEN 'RIDERS' THEN 'Riders' "
@@ -134,9 +132,7 @@ class QueryUtils:
                 "           , log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i') AS request_per_minute "
                 "           , COUNT(log.log_date) AS request_cnt "
                 "       FROM sblog.ad_listing_api_log log "
-                "      WHERE log_dt <= date_format(current_date, '%Y-%m-%d') "
-                "        AND log_dt >= date_format(current_date - interval '1' day, '%Y-%m-%d') "
-                "        AND date_format(log.log_date, '%Y-%m-%d') =  date_format(current_date - interval '1' day, '%Y-%m-%d') "
+                "      WHERE log_dt = '{date}' "
                 "        AND log.env = 'RELEASE' "
                 "   GROUP BY log.servicetype, log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i') "
                 " ) "
@@ -172,7 +168,7 @@ class QueryUtils:
                 "       ) "
                 "     GROUP BY concat(servicetype, ' ', logtype) "
                 " ) "
-                " ORDER BY title ")
+                " ORDER BY title ").format(date=date)
 
 
 class Chat(object):
@@ -216,7 +212,7 @@ class SlackMessageUtils:
             for value in texts[1]:
                 text.append(str(value[0]) + ": " + str("{:,d}".format(value[1])))
         return "\n".join(text)
-
+        
     def make_attachments(self, pretext=None, title=None, text=None, fields=None):
         attachments = [{}]
         attachments[0]['pretext'] = pretext
@@ -253,31 +249,31 @@ if __name__ == '__main__':
     try:
         # 1. Connect
         woowahanPresto.connect()
-
+    
         # 2. Execute SQL with Presto
         # 2-1. select today
         presto_today = woowahanPresto.string_date_from_today(-1)
         inquery_date = ''.join(presto_today)
         print(inquery_date)
-
+    
         # 2-2-1. execute app usage query
         app_usage_query = queryUtils.albatross_daily_app_usage(inquery_date)
         presto_app_usage_query = woowahanPresto.fetchall(app_usage_query)
         print(presto_app_usage_query)
-
+        
         # 2-2-2. execute rps query
         rps_query = queryUtils.albatross_daily_max_rps(inquery_date)
         presto_rps_results = woowahanPresto.fetchall(rps_query)
         print(presto_rps_results)
-
+        
         # 2-2-3. execute rpm query
         rpm_query = queryUtils.albatross_daily_max_rpm(inquery_date)
         presto_rpm_results = woowahanPresto.fetchall(rpm_query)
         print(presto_rpm_results)
-
+        
         # 3. close connection
         woowahanPresto.close()
-
+    
         # 4. Make message for Slack
         array_texts = []
         array_texts.append(["[App Usage]", presto_app_usage_query])
@@ -285,11 +281,11 @@ if __name__ == '__main__':
         array_texts.append(["[Max(RPM)]", presto_rpm_results])
         message = slackMessageUtils.make_text(array_texts)
         print(message)
-
+    
         attachments = slackMessageUtils.make_attachments(pretext=None, title=None, text=message)
-
+    
         # 5. Send message to Slack
-        chat.post_slack(text="*`Albatross Baemin/Riders Daily 통계 SUCCESS: {0}`*".format(inquery_date), attachments=attachments)
+        chat.post_slack(text="*`Baemin/Riders Daily 통계 SUCCESS: {0}`*".format(inquery_date), attachments=attachments)
         # print("\nattachments = {%s}" % attachments)
 
     except BaseException as e:
@@ -300,4 +296,4 @@ if __name__ == '__main__':
 
         print(exception_message)
 
-        chat.post_slack("*`Albatross Baemin/Riders Daily 통계 FAIL`*\n {0}".format(exception_message))
+        chat.post_slack("*`Baemin/Riders Daily 통계 FAIL`*\n {0}".format(exception_message))
