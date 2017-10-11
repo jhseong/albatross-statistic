@@ -19,6 +19,7 @@ PRESTO_DEFAULT_USER = 'zeppelin'
 
 # albatross-info channel
 TEST_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
+SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
 
 
 class WoowahanPresto(object):
@@ -210,7 +211,7 @@ class SlackMessageUtils:
             if texts[0] is not None:
                 text.append("\n" + texts[0])
             for value in texts[1]:
-                text.append(str(value[0]) + ": " + str("{:,d}".format(value[1])))
+                text.append(" - " + str(value[0]) + ": " + str("{:,d}".format(value[1])))
         return "\n".join(text)
         
     def make_attachments(self, pretext=None, title=None, text=None, fields=None):
@@ -276,7 +277,7 @@ if __name__ == '__main__':
     
         # 4. Make message for Slack
         array_texts = []
-        array_texts.append(["[App Usage]", presto_app_usage_query])
+        array_texts.append(["[App Request]", presto_app_usage_query])
         array_texts.append(["[Max(RPS)]", presto_rps_results])
         array_texts.append(["[Max(RPM)]", presto_rpm_results])
         message = slackMessageUtils.make_text(array_texts)
