@@ -18,9 +18,9 @@ PRESTO_DEFAULT_PORT = '12303'
 PRESTO_DEFAULT_USER = 'zeppelin'
 
 # albatross-info channel
+REAL_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
 TEST_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
-SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
-
+SLACK_WEBHOOK_URL = REAL_SLACK_WEBHOOK_URL
 
 class WoowahanPresto(object):
     def __init__(self, host=PRESTO_DEFAULT_HOST, port=PRESTO_DEFAULT_PORT, user=PRESTO_DEFAULT_USER):
@@ -41,6 +41,9 @@ class WoowahanPresto(object):
 
     def string_date_from_today(self, interval):
         return self.fetchone("SELECT date_format(current_date + interval '{0}' day, '%Y-%m-%d')".format(interval))
+        
+    def today(self):
+        return self.string_date_from_today(0)
 
     def close(self):
         if self.cursor:
@@ -65,10 +68,12 @@ class QueryUtils:
                 "                   WHEN 'BaeminSearchLog' THEN 'Baemin Search' "
                 "                   WHEN 'RidersListingLog' THEN 'Riders Listing' "
                 "                   WHEN 'RidersSearchLog' THEN 'Riders Search' "
+                "                   WHEN 'BaeminCurationLog' THEN 'Baemin Curation' "
                 "                   ELSE log.logtype "
                 "               END AS logtype "
                 "         FROM sblog.ad_listing_api_log log "
-                "        WHERE log_dt = '{date}' "
+                "        WHERE log.log_dt = '{date}' "
+                "          AND log.log_hour BETWEEN 0 AND 23 "
                 "          AND log.env = 'RELEASE' "
                 "          AND log.logtype != 'RidersShopInquiryLog' "
                 "      ) "
@@ -85,7 +90,8 @@ class QueryUtils:
             "           , log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i:%s') AS request_seconds "
             "           , COUNT(log.log_date) AS request_cnt "
             "       FROM sblog.ad_listing_api_log log "
-            "      WHERE log_dt = '{date}' "
+            "      WHERE log.log_dt = '{date}' "
+            "        AND log_hour BETWEEN 0 AND 23 "            
             "        AND log.env = 'RELEASE' "
             "   GROUP BY log.servicetype, log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i:%s') "
             " ) "
@@ -111,13 +117,22 @@ class QueryUtils:
             "     SELECT  concat(servicetype, ' ', logtype) AS title "
             "           , MAX(tot_request_cnt) AS max_request_cnt "
             "       FROM ( "
-            "          SELECT request_seconds, ua.servicetype "
-            "               , CASE regexp_like(ua.logtype, '.ListingLog$') WHEN true THEN 'Listing' "
-            "                                                                        ELSE 'Search' "
-            "                  END AS logtype "
-            "               , SUM(request_cnt) AS tot_request_cnt "
-            "             FROM user_activities ua "
-            "         GROUP BY request_seconds, ua.servicetype, regexp_like(ua.logtype, '.ListingLog$') "
+             "              SELECT request_seconds  "                                                             
+             "                   , ua.servicetype   "
+             "                   , CASE WHEN regexp_like(ua.logtype, '.ListingLog$') = true THEN 'Listing'  "
+             "                          WHEN regexp_like(ua.logtype, '.SearchLog$') = true THEN 'Search'  "
+             "                          WHEN regexp_like(ua.logtype, '.CurationLog$') = true THEN 'Curation' "
+             "                          ELSE ua.logtype  "
+             "                      END AS logtype  "
+             "                   , SUM(request_cnt) AS tot_request_cnt  "
+             "                 FROM user_activities ua  "
+             "             GROUP BY request_seconds "
+             "                    , ua.servicetype  "
+             "                    , CASE WHEN regexp_like(ua.logtype, '.ListingLog$') = true THEN 'Listing'  "
+             "                          WHEN regexp_like(ua.logtype, '.SearchLog$') = true THEN 'Search'  "
+             "                          WHEN regexp_like(ua.logtype, '.CurationLog$') = true THEN 'Curation' "
+             "                          ELSE ua.logtype  "
+             "                      END "
             "       ) "
             "     GROUP BY concat(servicetype, ' ', logtype) "
             " ) "
@@ -133,7 +148,8 @@ class QueryUtils:
                 "           , log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i') AS request_per_minute "
                 "           , COUNT(log.log_date) AS request_cnt "
                 "       FROM sblog.ad_listing_api_log log "
-                "      WHERE log_dt = '{date}' "
+                "      WHERE log.log_dt = '{date}' "
+                "        AND log.log_hour BETWEEN 0 AND 23 "                
                 "        AND log.env = 'RELEASE' "
                 "   GROUP BY log.servicetype, log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i') "
                 " ) "
@@ -159,13 +175,22 @@ class QueryUtils:
                 "     SELECT  concat(servicetype, ' ', logtype) AS title "
                 "           , MAX(tot_request_cnt) AS max_request_cnt "
                 "       FROM ( "
-                "          SELECT request_per_minute, ua.servicetype "
-                "               , CASE regexp_like(ua.logtype, '.ListingLog$') WHEN true THEN 'Listing' "
-                "                                                                         ELSE 'Search' "
-                "                  END AS logtype "
-                "               , SUM(request_cnt) AS tot_request_cnt "
-                "             FROM user_activities ua "
-                "         GROUP BY request_per_minute, ua.servicetype, regexp_like(ua.logtype, '.ListingLog$') "
+                 "              SELECT request_per_minute  "                                                             
+                 "                   , ua.servicetype   "
+                 "                   , CASE WHEN regexp_like(ua.logtype, '.ListingLog$') = true THEN 'Listing'  "
+                 "                          WHEN regexp_like(ua.logtype, '.SearchLog$') = true THEN 'Search'  "
+                 "                          WHEN regexp_like(ua.logtype, '.CurationLog$') = true THEN 'Curation' "
+                 "                          ELSE ua.logtype  "
+                 "                      END AS logtype  "
+                 "                   , SUM(request_cnt) AS tot_request_cnt  "
+                 "                 FROM user_activities ua  "
+                 "             GROUP BY request_per_minute "
+                 "                    , ua.servicetype  "
+                 "                    , CASE WHEN regexp_like(ua.logtype, '.ListingLog$') = true THEN 'Listing'  "
+                 "                          WHEN regexp_like(ua.logtype, '.SearchLog$') = true THEN 'Search'  "
+                 "                          WHEN regexp_like(ua.logtype, '.CurationLog$') = true THEN 'Curation' "
+                 "                          ELSE ua.logtype  "
+                 "                      END "
                 "       ) "
                 "     GROUP BY concat(servicetype, ' ', logtype) "
                 " ) "
@@ -173,7 +198,7 @@ class QueryUtils:
 
 
 class Chat(object):
-    def  __init__(self, webhook_url=TEST_SLACK_WEBHOOK_URL):
+    def  __init__(self, webhook_url=SLACK_WEBHOOK_URL):
         self.webhook_url = webhook_url
 
     # send data to slack
@@ -253,7 +278,7 @@ if __name__ == '__main__':
     
         # 2. Execute SQL with Presto
         # 2-1. select today
-        presto_today = woowahanPresto.string_date_from_today(-1)
+        presto_today = woowahanPresto.today()
         inquery_date = ''.join(presto_today)
         print(inquery_date)
     
@@ -286,7 +311,7 @@ if __name__ == '__main__':
         attachments = slackMessageUtils.make_attachments(pretext=None, title=None, text=message)
     
         # 5. Send message to Slack
-        chat.post_slack(text="*`Baemin/Riders Daily 통계 SUCCESS: {0}`*".format(inquery_date), attachments=attachments)
+        chat.post_slack(text="*`배민/신배라 일 통계 정상: {0}`*".format(inquery_date), attachments=attachments)
         # print("\nattachments = {%s}" % attachments)
 
     except BaseException as e:
@@ -297,4 +322,5 @@ if __name__ == '__main__':
 
         print(exception_message)
 
-        chat.post_slack("*`Baemin/Riders Daily 통계 FAIL`*\n {0}".format(exception_message))
+        chat.post_slack("*`배민/신배라 일 통계 실패`*\n {0}".format(exception_message))
+
