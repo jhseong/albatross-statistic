@@ -20,7 +20,7 @@ PRESTO_DEFAULT_USER = 'zeppelin'
 # albatross-info channel
 REAL_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
 TEST_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/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'
-SLACK_WEBHOOK_URL = REAL_SLACK_WEBHOOK_URL
+SLACK_WEBHOOK_URL = z.select("Slack_Channel",[(TEST_SLACK_WEBHOOK_URL, "test_channel"),(REAL_SLACK_WEBHOOK_URL, "albatross-info")], REAL_SLACK_WEBHOOK_URL)
 
 class WoowahanPresto(object):
     def __init__(self, host=PRESTO_DEFAULT_HOST, port=PRESTO_DEFAULT_PORT, user=PRESTO_DEFAULT_USER):
@@ -278,7 +278,8 @@ if __name__ == '__main__':
     
         # 2. Execute SQL with Presto
         # 2-1. select today
-        presto_today = woowahanPresto.today()
+        date_interval = z.input("Interval From Today", "0")
+        presto_today = woowahanPresto.string_date_from_today(date_interval)
         inquery_date = ''.join(presto_today)
         print(inquery_date)
     
@@ -287,12 +288,12 @@ if __name__ == '__main__':
         presto_app_usage_query = woowahanPresto.fetchall(app_usage_query)
         print(presto_app_usage_query)
         
-        # 2-2-2. execute rps query
+        # # 2-2-2. execute rps query
         rps_query = queryUtils.albatross_daily_max_rps(inquery_date)
         presto_rps_results = woowahanPresto.fetchall(rps_query)
         print(presto_rps_results)
         
-        # 2-2-3. execute rpm query
+        # # 2-2-3. execute rpm query
         rpm_query = queryUtils.albatross_daily_max_rpm(inquery_date)
         presto_rpm_results = woowahanPresto.fetchall(rpm_query)
         print(presto_rpm_results)
