@@ -56,43 +56,47 @@ class WoowahanPresto(object):
 
 
 class QueryUtils:
-    pass
+    def __init__(self, env):
+        self.env = env
 
     def albatross_daily_app_usage(self, date):
-        return ("  SELECT logtype, COUNT(logtype) "
-                "     FROM ( "
-                "       SELECT CASE log.logtype "
-                "                   WHEN 'BaeminListingLog' THEN 'Baemin Listing' "
-                "                   WHEN 'BaeminRankShopListingLog' THEN 'Baemin Listing' "
-                "                   WHEN 'BaeminFranchiseListingLog' THEN 'Baemin Listing' "
-                "                   WHEN 'BaeminSearchLog' THEN 'Baemin Search' "
-                "                   WHEN 'RidersListingLog' THEN 'Riders Listing' "
-                "                   WHEN 'RidersSearchLog' THEN 'Riders Search' "
-                "                   WHEN 'BaeminCurationLog' THEN 'Baemin Curation' "
-                "                   ELSE log.logtype "
-                "               END AS logtype "
-                "         FROM sblog.ad_listing_api_log log "
-                "        WHERE log.log_dt = '{date}' "
-                "          AND log.log_hour BETWEEN 0 AND 23 "
-                "          AND log.env = 'RELEASE' "
-                "          AND log.logtype != 'RidersShopInquiryLog' "
-                "      ) "
-                " GROUP BY logtype "
-                " ORDER BY logtype ").format(date=date)
+        return        (" SELECT servicetype || ' ' || logtype AS logtype, request_cnt "
+                       "   FROM ( "
+                       "        SELECT servicetype, logtype, COUNT(logtype) AS request_cnt  "
+                       "           FROM (   "
+                       "             SELECT CASE WHEN regexp_like(log.logtype, '.ListingLog$') = TRUE THEN 'Listing' "
+                       "                         WHEN regexp_like(log.logtype, '.SearchLog$') = TRUE THEN 'Search' "
+                       "                         WHEN regexp_like(log.logtype, '.CurationLog$') = TRUE THEN 'Curation' "
+                       "                         WHEN regexp_like(log.logtype, '^ShopOpenStatusLog$') = TRUE THEN 'ShopOpen' "
+                       "                         ELSE log.logtype   "
+                       "                     END AS logtype "
+                       "                   , CASE servicetype WHEN 'BAEMIN' THEN 'Baemin' "
+                       "                                      WHEN 'RIDERS' THEN 'Riders' "
+                       "                                      ELSE servicetype "
+                       "                     END AS servicetype "
+                       "               FROM sblog.ad_listing_api_log log   "
+                       "              WHERE log.log_dt = '{date}' "
+                       "                AND log.log_hour BETWEEN 0 AND 23   "
+                       "                AND log.env = '{env}'   "
+                       "                AND log.logtype != 'RidersShopInquiryLog'   "
+                       "            )   "
+                       "      GROUP BY servicetype, logtype   "
+                       "      ORDER BY servicetype, logtype   "
+                       "        ) "  ).format(date=date, env=self.env)
                 
     def albatross_daily_max_rps(self, date):
         return (" " 
             " WITH user_activities AS ( "
             "     SELECT  CASE log.servicetype WHEN 'BAEMIN' THEN 'Baemin' "
             "                                  WHEN 'RIDERS' THEN 'Riders' "
-            "                                  ELSE '' "
+            "                                  ELSE log.servicetype "
             "             END AS servicetype "
             "           , log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i:%s') AS request_seconds "
             "           , COUNT(log.log_date) AS request_cnt "
             "       FROM sblog.ad_listing_api_log log "
             "      WHERE log.log_dt = '{date}' "
             "        AND log_hour BETWEEN 0 AND 23 "            
-            "        AND log.env = 'RELEASE' "
+            "        AND log.env = '{env}' "
             "   GROUP BY log.servicetype, log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i:%s') "
             " ) "
             " SELECT * "
@@ -122,6 +126,7 @@ class QueryUtils:
              "                   , CASE WHEN regexp_like(ua.logtype, '.ListingLog$') = true THEN 'Listing'  "
              "                          WHEN regexp_like(ua.logtype, '.SearchLog$') = true THEN 'Search'  "
              "                          WHEN regexp_like(ua.logtype, '.CurationLog$') = true THEN 'Curation' "
+             "                          WHEN regexp_like(ua.logtype, '^ShopOpenStatusLog$') = TRUE THEN 'ShopOpen' "
              "                          ELSE ua.logtype  "
              "                      END AS logtype  "
              "                   , SUM(request_cnt) AS tot_request_cnt  "
@@ -131,12 +136,13 @@ class QueryUtils:
              "                    , CASE WHEN regexp_like(ua.logtype, '.ListingLog$') = true THEN 'Listing'  "
              "                          WHEN regexp_like(ua.logtype, '.SearchLog$') = true THEN 'Search'  "
              "                          WHEN regexp_like(ua.logtype, '.CurationLog$') = true THEN 'Curation' "
+             "                          WHEN regexp_like(ua.logtype, '^ShopOpenStatusLog$') = TRUE THEN 'ShopOpen' "
              "                          ELSE ua.logtype  "
              "                      END "
             "       ) "
             "     GROUP BY concat(servicetype, ' ', logtype) "
             " ) "
-            " ORDER BY title ").format(date=date)
+            " ORDER BY title ").format(date=date, env=self.env)
 
     def albatross_daily_max_rpm(self, date):
         return (" " 
@@ -150,7 +156,7 @@ class QueryUtils:
                 "       FROM sblog.ad_listing_api_log log "
                 "      WHERE log.log_dt = '{date}' "
                 "        AND log.log_hour BETWEEN 0 AND 23 "                
-                "        AND log.env = 'RELEASE' "
+                "        AND log.env = '{env}' "
                 "   GROUP BY log.servicetype, log.logtype, date_format(log.log_date, '%Y-%m-%d %H:%i') "
                 " ) "
                 " SELECT * "
@@ -180,6 +186,7 @@ class QueryUtils:
                  "                   , CASE WHEN regexp_like(ua.logtype, '.ListingLog$') = true THEN 'Listing'  "
                  "                          WHEN regexp_like(ua.logtype, '.SearchLog$') = true THEN 'Search'  "
                  "                          WHEN regexp_like(ua.logtype, '.CurationLog$') = true THEN 'Curation' "
+                 "                          WHEN regexp_like(ua.logtype, '^ShopOpenStatusLog$') = TRUE THEN 'ShopOpen' "
                  "                          ELSE ua.logtype  "
                  "                      END AS logtype  "
                  "                   , SUM(request_cnt) AS tot_request_cnt  "
@@ -189,12 +196,13 @@ class QueryUtils:
                  "                    , CASE WHEN regexp_like(ua.logtype, '.ListingLog$') = true THEN 'Listing'  "
                  "                          WHEN regexp_like(ua.logtype, '.SearchLog$') = true THEN 'Search'  "
                  "                          WHEN regexp_like(ua.logtype, '.CurationLog$') = true THEN 'Curation' "
+                 "                          WHEN regexp_like(ua.logtype, '^ShopOpenStatusLog$') = TRUE THEN 'ShopOpen' "
                  "                          ELSE ua.logtype  "
                  "                      END "
                 "       ) "
                 "     GROUP BY concat(servicetype, ' ', logtype) "
                 " ) "
-                " ORDER BY title ").format(date=date)
+                " ORDER BY title ").format(date=date, env=self.env)
 
 
 class Chat(object):
@@ -267,12 +275,15 @@ class LoggerUtils:
 if __name__ == '__main__':
 
     chat = Chat()
-
     woowahanPresto = WoowahanPresto()
-    queryUtils = QueryUtils()
+    
+    env = z.select("Env", [("RELEASE", "RELEASE"), ("TEST", "TEST")], "RELEASE")
+    queryUtils = QueryUtils(env)
+    
     slackMessageUtils = SlackMessageUtils()
 
     try:
+        print(env)        
         # 1. Connect
         woowahanPresto.connect()
     
@@ -283,17 +294,17 @@ if __name__ == '__main__':
         inquery_date = ''.join(presto_today)
         print(inquery_date)
     
-        # 2-2-1. execute app usage query
+        # # 2-2-1. execute app usage query
         app_usage_query = queryUtils.albatross_daily_app_usage(inquery_date)
         presto_app_usage_query = woowahanPresto.fetchall(app_usage_query)
         print(presto_app_usage_query)
         
-        # # 2-2-2. execute rps query
+        # 2-2-2. execute rps query
         rps_query = queryUtils.albatross_daily_max_rps(inquery_date)
         presto_rps_results = woowahanPresto.fetchall(rps_query)
         print(presto_rps_results)
         
-        # # 2-2-3. execute rpm query
+        # 2-2-3. execute rpm query
         rpm_query = queryUtils.albatross_daily_max_rpm(inquery_date)
         presto_rpm_results = woowahanPresto.fetchall(rpm_query)
         print(presto_rpm_results)
@@ -313,7 +324,7 @@ if __name__ == '__main__':
     
         # 5. Send message to Slack
         chat.post_slack(text="*`배민/신배라 일 통계 정상: {0}`*".format(inquery_date), attachments=attachments)
-        # print("\nattachments = {%s}" % attachments)
+        print("\nattachments = {%s}" % attachments)
 
     except BaseException as e:
         # send error message to slack
@@ -323,5 +334,7 @@ if __name__ == '__main__':
 
         print(exception_message)
 
-        chat.post_slack("*`배민/신배라 일 통계 실패`*\n {0}".format(exception_message))
+        attachments = slackMessageUtils.make_attachments(pretext=None, title=None, text=exception_message)
+        chat.post_slack(text="*`배민/신배라 일 통계 실패: {0}`*".format(inquery_date), attachments=attachments)
+
 
